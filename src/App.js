@@ -1,81 +1,131 @@
 import React, { useState } from "react";
-import { gql, useQuery, useMutation } from "@apollo/client";
+import { gql, useQuery } from "@apollo/client";
+import { MockedProvider } from "@apollo/client/testing";
 
-const ALL_PEOPLE = gql`
-  query AllPeople {
-    people {
-      id
-      name
-    }
-  }
-`;
-
-const ADD_PERSON = gql`
-  mutation AddPerson($name: String) {
-    addPerson(name: $name) {
-      id
-      name
-    }
-  }
-`;
-
-export default function App() {
-  const [name, setName] = useState('');
-  const {
-    loading,
-    data,
-  } = useQuery(ALL_PEOPLE);
-
-  const [addPerson] = useMutation(ADD_PERSON, {
-    update: (cache, { data: { addPerson: addPersonData } }) => {
-      const peopleResult = cache.readQuery({ query: ALL_PEOPLE });
-
-      cache.writeQuery({
-        query: ALL_PEOPLE,
-        data: {
-          ...peopleResult,
-          people: [
-            ...peopleResult.people,
-            addPersonData,
+const assetsSameDepth = {
+  assets: {
+      assetsConnection: {
+          edges: [
+              {
+                  node: {
+                      id: '3',
+                      assets: {
+                          assetsConnection: {
+                              edges: [{
+                                  node: { id: '4' },
+                              }]
+                          }
+                      }
+                  }
+              },
+              {
+                  node: {
+                      id: '1',
+                      assets: {
+                          assetsConnection: {
+                              edges: [{
+                                  node: { id: '4' },
+                              }]
+                          }
+                      }
+                  },
+              }
           ],
-        },
-      });
+      }
+  }
+};
+
+const assetsDifferentDepth = {
+  assets: {
+      assetsConnection: {
+          edges: [
+              {
+                  node: {
+                      id: '7',
+                      assets: {
+                          assetsConnection: {
+                              edges: [{
+                                  node: { id: '4' },
+                              }]
+                          }
+                      }
+                  }
+              },
+              {
+                  node: {
+                      id: '100',
+                  },
+              }
+          ],
+      }
+  }
+}; 
+
+export const AssetsDocument = gql`
+    query Assets($input: AssetsInput!) {
+      assets(input: $input) {
+        assetsConnection {
+          edges {
+            node {
+              id
+              assets {
+                assetsConnection {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+`;
+
+const assetsMocks = [
+  {
+      request: {
+          query: AssetsDocument,
+          variables: { id: 0 },
+      },
+      result: {
+          data: {
+              ...assetsSameDepth,
+          },
+      },
+  },
+  {
+    request: {
+        query: AssetsDocument,
+        variables: { id: 1 },
     },
-  });
+    result: {
+        data: {
+            ...assetsDifferentDepth,
+        },
+    },
+},
+];
+
+export default () => (
+  <MockedProvider mocks={assetsMocks}>
+    <App />
+  </MockedProvider>
+);
+
+function App() {
+  const [id, setId] = useState(1);
+  const response = useQuery(AssetsDocument, { variables: { id }});
+
+  console.log(id);
+  console.log(response);
 
   return (
     <main>
-      <h1>Apollo Client Issue Reproduction</h1>
-      <p>
-        This application can be used to demonstrate an error in Apollo Client.
-      </p>
-      <div className="add-person">
-        <label htmlFor="name">Name</label>
-        <input 
-          type="text" 
-          name="name" 
-          value={name}
-          onChange={evt => setName(evt.target.value)}
-        />
-        <button
-          onClick={() => {
-            addPerson({ variables: { name } });
-            setName('');
-          }}
-        >
-          Add person
-        </button>
-      </div>
-      <h2>Names</h2>
-      {loading ? (
-        <p>Loading…</p>
-      ) : (
-        <ul>
-          {data?.people.map(person => (
-            <li key={person.id}>{person.name}</li>
-          ))}
-        </ul>
-      )}
+      {response.data ? 'We have data' : 'No data'}
+      <button onClick={() => setId(id => (id + 1) % 2)}>Change mocked asset</button>
     </main>
   );
 }
